@@ -16,6 +16,7 @@ const ProjectSchema: Schema<IProject> = new Schema({
         type: String,
         required: true,
         trim: true,
+        unique: false,
     },
     userId: {
         type: Schema.Types.ObjectId,

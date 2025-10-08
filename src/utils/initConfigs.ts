@@ -48,4 +48,6 @@ export const initConfigs = () => {
     global.ecsClient = ecsClient;
     global.kafka = kafka;
     global.clickhouseClient = clickhouseClient;
+
+    console.log('Intialised the clickhouse and kafka');
 } 

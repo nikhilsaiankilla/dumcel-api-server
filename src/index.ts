@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import { initSecrets } from "./utils/secrets";
 import { DeploymentModel, DeploymentState } from "./model/deployment.model";
 import { v4 } from 'uuid'
+import { initConfigs } from "./utils/initConfigs";
 
 const app = express();
 app.use(express.json());
@@ -138,6 +139,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
     await initSecrets();
     await connectDb()
+    initConfigs();
 
     await initKafkaConsumer(global.kafka, global.clickhouseClient)
     console.log(`Server running on port ${PORT}`)

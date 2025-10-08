@@ -6,8 +6,6 @@ import { generateSlug } from "random-word-slugs";
 import { DeploymentModel, DeploymentState } from "../model/deployment.model";
 import { AuthenticatedRequest } from "../middleware/auth.middleware";
 
-const secrets = global.secrets;
-
 export const projectController = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const schema = z.object({
@@ -40,6 +38,8 @@ export const projectController = async (req: AuthenticatedRequest, res: Response
 
 export const deployController = async (req: AuthenticatedRequest, res: Response) => {
     try {
+        const secrets = global.secrets;
+
         const { projectId } = req.params;
         const project = await ProjectModel.findById(projectId);
         if (!project) throw new Error("Project Not Found");
