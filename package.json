@@ -1,0 +1,41 @@
+{
+  "name": "api-gateway",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon --watch 'src/**/*.ts' --exec ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.3",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^24.6.2",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ecs": "^3.901.0",
+    "@aws-sdk/client-secrets-manager": "^3.901.0",
+    "@clickhouse/client": "^1.12.1",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/kafkajs": "^1.8.2",
+    "@types/mongoose": "^5.11.96",
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "kafkajs": "^2.2.4",
+    "mongoose": "^8.19.0",
+    "random-word-slugs": "^0.1.7",
+    "uuid": "^13.0.0",
+    "uuidv4": "^6.2.13",
+    "zod": "^4.1.11"
+  }
+}
