@@ -12,12 +12,35 @@ export interface IUser extends Document {
 
 // User schema
 const UserSchema: Schema<IUser> = new Schema({
-    name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    photo: { type: String, required: false },
-    githubId: { type: String, required: false, unique: true },
-    password: { type: String, required: false, },
-    createdAt: { type: Date, default: Date.now },
+    name: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    email: {
+        type: String,
+        required: true,
+        unique: true,
+        lowercase: true,
+        trim: true
+    },
+    photo: {
+        type: String,
+        required: false
+    },
+    githubId: {
+        type: String,
+        required: false,
+        unique: true
+    },
+    password: {
+        type: String,
+        required: false,
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
 });
 
 // User model

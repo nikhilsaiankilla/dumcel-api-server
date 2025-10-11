@@ -145,6 +145,20 @@ export const forgetPassword = async (req: Request, res: Response) => {
 
         if (!otpStored) throw new Error("Failed to store otp");
 
+        // Set a cookie to indicate OTP is verified
+        res.cookie("otpSent", "true", {
+            httpOnly: true, // frontend cannot access JS
+            secure: process.env.NODE_ENV === "production", // HTTPS only in prod
+            maxAge: 10 * 60 * 1000, // 10 minutes
+            sameSite: "lax",
+        });
+
+        res.cookie("otpEmail", email, {
+            httpOnly: true, // frontend cannot access JS
+            secure: process.env.NODE_ENV === "production", // HTTPS only in prod
+            maxAge: 10 * 60 * 1000, // 10 minutes
+            sameSite: "lax",
+        })
         // send the otp to the user via mail
         console.log(otp);
 
@@ -196,6 +210,15 @@ export const verifyOtp = async (req: Request, res: Response) => {
             maxAge: 10 * 60 * 1000, // 10 minutes
             sameSite: "lax",
         });
+
+        res.cookie("email", email, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 10 * 60 * 1000, // 10 minutes
+            sameSite: "lax",
+        });
+
+        res.clearCookie('otpSent');
 
         return res.status(200).json({
             success: true,

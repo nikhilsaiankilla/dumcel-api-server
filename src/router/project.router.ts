@@ -1,5 +1,5 @@
 import express from "express";
-import { deployController, getAllProjectsController, getProjectController, logsController, projectController } from "../controller/project.controller";
+import { deployController, getAllDeploymentsController, getAllProjectsController, getProjectController, logsController, projectController } from "../controller/project.controller";
 import { authMiddleware } from "../middleware/auth.middleware";
 
 const router = express.Router();
@@ -13,5 +13,7 @@ router.post('/add-project', authMiddleware, projectController);
 router.post('/deploy/:projectId', authMiddleware, deployController)
 
 router.get('/logs/:deploymentId', authMiddleware, logsController);
+
+router.get('/get-all-deployments', authMiddleware, getAllDeploymentsController)
 
 export const projectRouter = router;

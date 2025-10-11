@@ -7,8 +7,16 @@ import { initSecrets } from "./utils/secrets";
 import { DeploymentModel, DeploymentState } from "./model/deployment.model";
 import { v4 } from 'uuid'
 import { initConfigs } from "./utils/initConfigs";
+import cors from 'cors'
 
-const app = express();
+const app = express()
+
+app.use(cors({
+    origin: "http://localhost:3000",
+    credentials: true
+}));
+
+// app.use(cors())
 app.use(express.json());
 app.use(cookieParser());
 
@@ -81,11 +89,9 @@ async function initKafkaConsumer(kafka: KafkaClient, clickhouseClient: ClickHous
                 const key: string | undefined = message.key?.toString();
 
                 try {
-                    if (key === 'logs') {
+                    if (key === 'log') {
                         // Insert logs into ClickHouse
                         const { PROJECT_ID, DEPLOYMENT_ID, log } = JSON.parse(stringMessages) as LogPayload;
-
-                        console.log("Log Message: ", log);
 
                         const res: ClickHouseInsertResult = await clickhouseClient.insert({
                             table: 'log_events',
@@ -96,8 +102,6 @@ async function initKafkaConsumer(kafka: KafkaClient, clickhouseClient: ClickHous
                             }],
                             format: 'JSONEachRow'
                         });
-
-                        console.log('res ', res);
 
                     } else if (key === 'deployment-status') {
                         // Update deployment status in MongoDB
@@ -134,7 +138,7 @@ app.use("/api/auth", authenticationRouter);
 
 app.use("/api/project", projectRouter);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8000;
 
 app.listen(PORT, async () => {
     await initSecrets();

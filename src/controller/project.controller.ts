@@ -51,6 +51,7 @@ export const deployController = async (req: AuthenticatedRequest, res: Response)
         const deployment = await DeploymentModel.create({
             projectId: projectId,
             state: DeploymentState.QUEUED,
+            userId: userId,
         });
 
         // Ensure secrets are available before using them
@@ -115,7 +116,13 @@ export const logsController = async (req: AuthenticatedRequest, res: Response) =
         if (!deploymentId) throw new Error("Deployment ID is required");
 
         const logs = await global.clickhouseClient.query({
-            query: `SELECT event_id, deployment_id, log, timestamp FROM log_events WHERE deployment_id = ${deploymentId} ORDER BY timestamp DESC`,
+            query: `
+                    SELECT event_id, deployment_id, log, timestamp 
+                    FROM log_events 
+                    WHERE deployment_id = {deployment_id:String} 
+                    ORDER BY timestamp DESC
+                    LIMIT 0,200
+                `,
             query_params: {
                 deployment_id: deploymentId,
             },
@@ -159,7 +166,7 @@ export const getAllProjectsController = async (req: AuthenticatedRequest, res: R
         const page = parseInt(req.query.page as string) || 1;
         const limit = parseInt(req.query.limit as string) || 10;
 
-        const skip = (page - 1) * 10;
+        const skip = (page - 1) * limit;
 
         const [projects, totalCount] = await Promise.all([
             ProjectModel.find({ userId })
@@ -173,6 +180,48 @@ export const getAllProjectsController = async (req: AuthenticatedRequest, res: R
             status: "success",
             data: {
                 projects,
+                pagination: {
+                    total: totalCount,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(totalCount / limit),
+                    hasNextPage: page * limit < totalCount,
+                    hasPrevPage: page > 1,
+                },
+            },
+        });
+    } catch (error: unknown) {
+        return res.status(400).json({ status: "failed", error: error instanceof Error ? error.message : "Internal Server Error" });
+    }
+}
+
+export const getAllDeploymentsController = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+
+        if (!userId) throw new Error('Unauthenticated User')
+
+        const page = parseInt(req.query.page as string) || 1;
+        const limit = parseInt(req.query.limit as string) || 10;
+
+        const skip = (page - 1) * limit;
+
+        const [deployments, totalCount] = await Promise.all([
+            DeploymentModel.find({ userId })
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .populate({
+                    path: "projectId", // the field in DeploymentModel
+                    select: "_id projectName subDomain updatedAt" // only include fields you need
+                }),
+            DeploymentModel.countDocuments({ userId })
+        ])
+
+        return res.json({
+            status: "success",
+            data: {
+                deployments,
                 pagination: {
                     total: totalCount,
                     page,

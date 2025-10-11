@@ -1,7 +1,7 @@
 // utils/secrets.ts
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 
-const secretName = "dumcel/prod/secrets";
+const secretName = "production/dumcel/secrets";
 const clientSecrets = new SecretsManagerClient({ region: "ap-south-1" });
 
 let cachedSecrets: Record<string, any> | null = null;

@@ -13,6 +13,7 @@ export enum DeploymentState {
 export interface IDeployment extends Document {
     projectId: mongoose.Types.ObjectId;
     state: DeploymentState;
+    userId: mongoose.Types.ObjectId;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -29,6 +30,11 @@ const DeploymentSchema: Schema<IDeployment> = new Schema({
         enum: Object.values(DeploymentState),
         default: DeploymentState.NOT_STARTED,
         required: true,
+    },
+    userId: {
+        type: Schema.Types.ObjectId,
+        required: true,
+        ref: "User",
     },
     createdAt: {
         type: Date,
