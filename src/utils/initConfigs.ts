@@ -13,7 +13,7 @@ declare global {
 export const initConfigs = () => {
     const secrets = global.secrets;
 
-    if (!secrets || !secrets.accessKeyId || !secrets.secretAccessKey) {
+    if (!secrets || !secrets.accessKeyId || !secrets.secretAccessKey || !secrets.kafka_ca_certificate) {
         throw new Error("AWS secrets are not configured on global.secrets");
     }
 
@@ -29,7 +29,8 @@ export const initConfigs = () => {
         clientId: `api-server`,
         brokers: [secrets.kafka_broker],
         ssl: {
-            ca: [fs.readFileSync(path.join(__dirname, 'kafka.pem'), 'utf-8')]
+            rejectUnauthorized: false,
+            ca: [secrets.kafka_ca_certificate.trim()]
         },
         sasl: {
             username: secrets.kafka_user_name,
