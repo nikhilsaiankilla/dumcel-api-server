@@ -140,22 +140,34 @@ export const logsController = async (req: AuthenticatedRequest, res: Response) =
 export const getProjectController = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const userId = req.user?.userId;
-
-        if (!userId) throw new Error('Unauthenticated User')
+        if (!userId) throw new Error('Unauthenticated User');
 
         const { projectId } = req.params;
-
         if (!projectId) throw new Error("Project ID is required");
 
-        const project = await ProjectModel.findById(projectId);
-
+        const project = await ProjectModel.findById(projectId).lean();
         if (!project) throw new Error('Project Not Found');
 
-        return res.json({ status: "success", project: project });
+        const latestDeployment = await DeploymentModel.findOne({ projectId })
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const projectWithDeploymentId = {
+            ...project,
+            latestDeploymentId: latestDeployment?._id || null,
+        };
+
+        return res.json({
+            status: "success",
+            project: projectWithDeploymentId,
+        });
     } catch (error: unknown) {
-        return res.status(400).json({ status: "failed", error: error instanceof Error ? error.message : "Internal Server Error" });
+        return res.status(400).json({
+            status: "failed",
+            error: error instanceof Error ? error.message : "Internal Server Error",
+        });
     }
-}
+};
 
 export const getAllProjectsController = async (req: AuthenticatedRequest, res: Response) => {
     try {
