@@ -39,25 +39,43 @@ export const projectController = async (req: AuthenticatedRequest, res: Response
 export const deployController = async (req: AuthenticatedRequest, res: Response) => {
     try {
         const secrets = global.secrets;
-
         const { projectId } = req.params;
+        const { env } = req.body; 
+
         const project = await ProjectModel.findById(projectId);
         if (!project) throw new Error("Project Not Found");
 
         const userId = req.user?.userId;
-
-        if (!userId) throw new Error('Unauthenticated User')
+        if (!userId) throw new Error("Unauthenticated User");
 
         const deployment = await DeploymentModel.create({
-            projectId: projectId,
+            projectId,
             state: DeploymentState.QUEUED,
-            userId: userId,
+            userId,
         });
 
-        // Ensure secrets are available before using them
         if (!secrets) throw new Error("Server secrets not initialized");
 
-        // Use ECS client instance created after secrets are fetched
+        // Convert user env object to ECS-compatible environment array
+        const envArray =
+            env && typeof env === "object"
+                ? Object.entries(env).map(([key, value]) => ({
+                    name: key,
+                    value: String(value),
+                }))
+                : [];
+
+        // Always include base variables required for build
+        const baseEnv = [
+            { name: "PROJECT_ID", value: projectId },
+            { name: "DEPLOYMENT_ID", value: deployment.id },
+            { name: "SUB_DOMAIN", value: project.subDomain },
+            { name: "GIT_REPO_URL", value: project.gitUrl },
+        ];
+
+        // Combine all envs
+        const allEnvVars = [...baseEnv, ...envArray];
+
         const command = new RunTaskCommand({
             cluster: secrets.CLUSTER,
             taskDefinition: secrets.TASK,
@@ -66,11 +84,7 @@ export const deployController = async (req: AuthenticatedRequest, res: Response)
             networkConfiguration: {
                 awsvpcConfiguration: {
                     assignPublicIp: "ENABLED",
-                    subnets: [
-                        secrets.subnets_1,
-                        secrets.subnets_2,
-                        secrets.subnets_3,
-                    ],
+                    subnets: [secrets.subnets_1, secrets.subnets_2, secrets.subnets_3],
                     securityGroups: [secrets.security_group],
                 },
             },
@@ -78,12 +92,7 @@ export const deployController = async (req: AuthenticatedRequest, res: Response)
                 containerOverrides: [
                     {
                         name: secrets.builder_image,
-                        environment: [
-                            { name: "GIT_REPO_URL", value: project.gitUrl },
-                            { name: "PROJECT_ID", value: projectId },
-                            { name: "DEPLOYMENT_ID", value: deployment.id },
-                            { name: "SUB_DOMAIN", value: project.subDomain },
-                        ],
+                        environment: allEnvVars, // custom + required env vars
                     },
                 ],
             },
@@ -94,14 +103,16 @@ export const deployController = async (req: AuthenticatedRequest, res: Response)
         return res.json({
             status: "Queued",
             data: {
-                projectId: projectId,
+                projectId,
                 deploymentId: deployment.id,
                 subDomain: project.subDomain,
             },
         });
     } catch (error) {
-        console.log("error ", error);
-        return res.status(400).json({ error: error instanceof Error ? error.message : "Internal Server Error" });
+        console.error("error", error);
+        return res.status(400).json({
+            error: error instanceof Error ? error.message : "Internal Server Error",
+        });
     }
 };
 
