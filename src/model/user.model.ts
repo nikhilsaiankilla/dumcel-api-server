@@ -1,12 +1,14 @@
 import mongoose, { Schema, Document, Model } from "mongoose";
+import { fa } from "zod/v4/locales";
 
 // TypeScript interface for User document
 export interface IUser extends Document {
     name: string;
     email: string;
     photo?: string;
-    githubId: string;
+    githubId?: string;
     password?: string;
+    isGitConnected: boolean;
     createdAt: Date;
 }
 
@@ -31,11 +33,16 @@ const UserSchema: Schema<IUser> = new Schema({
     githubId: {
         type: String,
         required: false,
-        unique: true
+        unique: true,
+        sparse: true
     },
     password: {
         type: String,
         required: false,
+    },
+    isGitConnected: {
+        type: Boolean,
+        default: false,
     },
     createdAt: {
         type: Date,

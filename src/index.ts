@@ -8,7 +8,10 @@ import { DeploymentModel, DeploymentState } from "./model/deployment.model";
 import { v4 } from 'uuid'
 import { initConfigs } from "./utils/initConfigs";
 import cors from 'cors'
+import { githubRouter } from "./router/github.routes";
+import dotenv from "dotenv";
 
+dotenv.config();
 const app = express()
 
 app.use(cors({
@@ -66,6 +69,9 @@ interface LogPayload {
     PROJECT_ID: string;
     DEPLOYMENT_ID: string;
     log: string;
+    type?: string;
+    step?: string;
+    meta?: Record<string, unknown>;
 }
 
 interface DeploymentStatusPayload {
@@ -74,14 +80,19 @@ interface DeploymentStatusPayload {
 }
 
 async function initKafkaConsumer(kafka: KafkaClient, clickhouseClient: ClickHouseClient): Promise<void> {
-    const consumer: Consumer = kafka.consumer({ groupId: 'api-server-logs-consumer' });
+    const consumer: Consumer = kafka.consumer({ groupId: "api-server-logs-consumer" });
 
     await consumer.connect();
-    await consumer.subscribe({ topic: 'container-log', fromBeginning: false });
-    await consumer.subscribe({ topic: 'deployment-status-events', fromBeginning: false });
+    await consumer.subscribe({ topic: "container-log", fromBeginning: false });
+    await consumer.subscribe({ topic: "deployment-status-events", fromBeginning: false });
 
     await consumer.run({
-        eachBatch: async function ({ batch, heartbeat, commitOffsetsIfNecessary, resolveOffset }: EachBatchPayload) {
+        eachBatch: async function ({
+            batch,
+            heartbeat,
+            commitOffsetsIfNecessary,
+            resolveOffset,
+        }: EachBatchPayload) {
             const messages: Message[] = batch.messages;
 
             for (const message of messages) {
@@ -89,29 +100,42 @@ async function initKafkaConsumer(kafka: KafkaClient, clickhouseClient: ClickHous
                 const key: string | undefined = message.key?.toString();
 
                 try {
-                    if (key === 'log') {
-                        // Insert logs into ClickHouse
-                        const { PROJECT_ID, DEPLOYMENT_ID, log } = JSON.parse(stringMessages) as LogPayload;
+                    if (key === "log") {
+                        const {
+                            PROJECT_ID,
+                            DEPLOYMENT_ID,
+                            log,
+                            type = "INFO",
+                            step = "general",
+                            meta = {},
+                        } = JSON.parse(stringMessages) as LogPayload;
 
-                        const res: ClickHouseInsertResult = await clickhouseClient.insert({
-                            table: 'log_events',
-                            values: [{
-                                event_id: v4(),
-                                deployment_id: DEPLOYMENT_ID,
-                                log: typeof log === "string" ? log : JSON.stringify(log)
-                            }],
-                            format: 'JSONEachRow'
+                        await clickhouseClient.insert({
+                            table: "log_events",
+                            values: [
+                                {
+                                    event_id: v4(),
+                                    timestamp: new Date().toISOString().slice(0, 19).replace("T", " "),
+                                    deployment_id: DEPLOYMENT_ID,
+                                    log: typeof log === "string" ? log : JSON.stringify(log),
+                                    metadata: JSON.stringify({
+                                        project_id: PROJECT_ID,
+                                        type,
+                                        step,
+                                        ...meta,
+                                    }),
+                                },
+                            ],
+                            format: "JSONEachRow",
                         });
-
-                    } else if (key === 'deployment-status') {
-                        // Update deployment status in MongoDB
+                    } else if (key === "deployment-status") {
                         const { DEPLOYMENT_ID, STATUS } = JSON.parse(stringMessages) as DeploymentStatusPayload;
 
                         let DEPLOYMENT_STATUS: any = DeploymentState.QUEUED;
 
-                        if (STATUS === 'failed') DEPLOYMENT_STATUS = DeploymentState.FAILED;
-                        else if (STATUS === 'success') DEPLOYMENT_STATUS = DeploymentState.READY;
-                        else if (STATUS === 'in_progress') DEPLOYMENT_STATUS = DeploymentState.IN_PROGRESS;
+                        if (STATUS === "failed") DEPLOYMENT_STATUS = DeploymentState.FAILED;
+                        else if (STATUS === "success") DEPLOYMENT_STATUS = DeploymentState.READY;
+                        else if (STATUS === "in_progress") DEPLOYMENT_STATUS = DeploymentState.IN_PROGRESS;
 
                         await DeploymentModel.findByIdAndUpdate(
                             { _id: DEPLOYMENT_ID },
@@ -123,10 +147,10 @@ async function initKafkaConsumer(kafka: KafkaClient, clickhouseClient: ClickHous
                     resolveOffset(message.offset);
                     await heartbeat();
                 } catch (error) {
-                    console.error(`Error processing message:`, error);
+                    console.error("Error processing message:", error);
                 }
             }
-        }
+        },
     });
 }
 
@@ -135,6 +159,8 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 app.use("/api/auth", authenticationRouter);
+
+app.use('/api/github', githubRouter)
 
 app.use("/api/project", projectRouter);
 

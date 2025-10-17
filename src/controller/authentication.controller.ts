@@ -5,6 +5,98 @@ import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import { generateOTP } from "../utils/utils";
 import { OtpModel } from "../model/otp.model";
+import { TokenModel } from "../model/tokens.model";
+import { AuthenticatedRequest } from "../middleware/auth.middleware";
+import { ProjectModel } from "../model/project.model";
+import { DeploymentModel } from "../model/deployment.model";
+import mongoose from "mongoose";
+
+export const githubLoginController = async (req: Request, res: Response) => {
+    try {
+        const secrets = global.secrets;
+        if (!secrets?.github_client_id || !secrets?.github_client_secret) {
+            throw new Error("GitHub OAuth secrets missing");
+        }
+
+        const { code } = req.query;
+        if (!code) return res.status(400).send("Missing authorization code");
+
+        // Exchange code → access token
+        const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+            },
+            body: JSON.stringify({
+                client_id: secrets.github_client_id,
+                client_secret: secrets.github_client_secret,
+                code,
+            }),
+        });
+
+        const tokenData = await tokenRes.json();
+        const accessToken = tokenData.access_token;
+        if (!accessToken) return res.status(500).send("GitHub token exchange failed");
+
+        // Get GitHub user profile + email
+        const [userRes, emailRes] = await Promise.all([
+            fetch("https://api.github.com/user", {
+                headers: { Authorization: `Bearer ${accessToken}` },
+            }),
+            fetch("https://api.github.com/user/emails", {
+                headers: { Authorization: `Bearer ${accessToken}` },
+            }),
+        ]);
+
+        const ghUser = await userRes.json();
+        const ghEmails = await emailRes.json();
+        const primaryEmail = ghEmails.find((e: any) => e.primary)?.email;
+
+        // Use githubId or email to find user
+        let user =
+            (primaryEmail && (await UserModel.findOne({ email: primaryEmail }))) ||
+            (await UserModel.findOne({ githubId: ghUser.id }));
+
+        // If not found, create new user
+        if (!user) {
+            user = await UserModel.create({
+                name: ghUser.name || ghUser.login,
+                email: primaryEmail || `${ghUser.login}@github.nouser`,
+                githubId: ghUser.id,
+                photo: ghUser.avatar_url,
+            });
+        } else {
+            // Update missing GitHub fields if necessary
+            if (!user.githubId) {
+                user.githubId = ghUser.id;
+                await user.save();
+            }
+        }
+
+        // Issue JWT
+        const token = jwt.sign(
+            { userId: user._id, email: user.email },
+            process.env.JWT_SECRET || "secret",
+            { expiresIn: "1h" }
+        );
+
+        // // Set cookie (example)
+        res.cookie("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 3600 * 1000, // 1 hour
+        });
+
+        // Redirect to frontend with token
+        const redirectUrl = `${process.env.FRONTEND_URL}/auth/github?token=${token}`;
+        return res.redirect(redirectUrl);
+
+    } catch (err) {
+        console.error("GitHub login error:", err);
+        res.status(500).send("GitHub login failed");
+    }
+};
 
 export const signupController = async (req: Request, res: Response) => {
     try {
@@ -145,6 +237,8 @@ export const forgetPassword = async (req: Request, res: Response) => {
 
         if (!otpStored) throw new Error("Failed to store otp");
 
+        //send otp via mail
+
         // Set a cookie to indicate OTP is verified
         res.cookie("otpSent", "true", {
             httpOnly: true, // frontend cannot access JS
@@ -159,8 +253,6 @@ export const forgetPassword = async (req: Request, res: Response) => {
             maxAge: 10 * 60 * 1000, // 10 minutes
             sameSite: "lax",
         })
-        // send the otp to the user via mail
-        console.log(otp);
 
         return res.status(200).json({
             success: true,
@@ -321,6 +413,77 @@ export const changePassword = async (req: Request, res: Response) => {
         return res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : "Internal Server Error",
+        });
+    }
+}
+
+export const deleteAccountController = async (req: AuthenticatedRequest, res: Response) => {
+    const session = await mongoose.startSession();
+
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthenticated user" });
+        }
+
+        const user = await UserModel.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        session.startTransaction();
+
+        await Promise.all([
+            ProjectModel.deleteMany({ userId }).session(session),
+            TokenModel.deleteMany({ userId }).session(session),
+            DeploymentModel.deleteMany({ userId }).session(session),
+            OtpModel.deleteMany({ userId }).session(session),
+            UserModel.deleteOne({ _id: userId }).session(session),
+        ]);
+
+        await session.commitTransaction();
+        session.endSession();
+
+        return res.status(200).json({
+            success: true,
+            message: "Account and all related data deleted successfully.",
+        });
+    } catch (error: unknown) {
+        await session.abortTransaction();
+        session.endSession();
+        console.error("Error deleting account:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to delete account",
+            error: error instanceof Error ? error.message : 'Internal server error',
+        });
+    }
+};
+
+export const getUserController = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.userId;
+        if (!userId) {
+            return res.status(401).json({ success: false, message: "Unauthenticated user" });
+        }
+
+        const user = await UserModel.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: "User retrieved successfully",
+            data: user,
+        });
+    } catch (error: unknown) {
+        console.error("Error fetching user:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch user",
+            error: error instanceof Error ? error.message : 'Internal server error',
         });
     }
 }
